@@ -61,7 +61,7 @@ app.post("/wallets/:id/credit", async (req: Request, res: Response) => {
         await client.query("BEGIN");
 
         const walletResult = await client.query(
-            "SELECT balance FROM wallet WHERE id = $1",
+            "SELECT balance, version FROM wallet WHERE id = $1",
             [walletId]
         );
 
@@ -72,11 +72,17 @@ app.post("/wallets/:id/credit", async (req: Request, res: Response) => {
 
         const currentBalance = walletResult.rows[0].balance;
         const newBalance = currentBalance + amount;
+        const currentVersion = walletResult.rows[0].version;
 
-        await client.query(
-            "UPDATE wallet SET balance = $1 WHERE id = $2",
-            [newBalance, walletId]
+        const updatedResult = await client.query(
+            "UPDATE wallet SET balance = $1, version = version + 1 WHERE id = $2 AND version = $3",
+            [newBalance, walletId, currentVersion]
         );
+
+        if(updatedResult.rowCount ===0 ){
+            await client.query("ROLLBACK");
+            return res.status(409).json({ error: "Wallet update conflict" });
+        }
 
         await client.query("COMMIT");
 
@@ -105,7 +111,7 @@ app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
         await client.query("BEGIN");
 
         const walletResult = await client.query(
-            "SELECT balance FROM wallet WHERE id = $1",
+            "SELECT balance, version FROM wallet WHERE id = $1",
             [walletId]
         );
 
@@ -120,11 +126,17 @@ app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
 
         const currentBalance = walletResult.rows[0].balance;
         const newBalance = currentBalance - amount;
+        const currentVersion = walletResult.rows[0].version;
 
-        await client.query(
-            "UPDATE wallet SET balance = $1 WHERE id = $2",
-            [newBalance, walletId]
+        const updatedResult = await client.query(
+            "UPDATE wallet SET balance = $1, version = version + 1 WHERE id = $2 AND version = $3",
+            [newBalance, walletId, currentVersion]
         );
+
+        if(updatedResult.rowCount ===0 ){
+            await client.query("ROLLBACK");
+            return res.status(409).json({ error: "Wallet update conflict" });
+        }
 
         await client.query("COMMIT");
 
