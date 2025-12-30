@@ -41,6 +41,103 @@ app.post("/wallets", async (req: Request, res: Response) => {
         if (client) client.release();
     }
 });
+type AmountRequest = {
+    amount: number;
+};
+
+app.post("/wallets/:id/credit", async (req: Request, res: Response) => {
+    const walletId = Number(req.params.id);
+    const body = req.body as AmountRequest;
+    const { amount } = body;
+
+    if (typeof amount !== "number" || amount <= 0) {
+        return res.status(400).json({ error: "amount must be a positive number" });
+    }
+
+    let client;
+
+    try {
+        client = await pool.connect();
+        await client.query("BEGIN");
+
+        const walletResult = await client.query(
+            "SELECT balance FROM wallet WHERE id = $1",
+            [walletId]
+        );
+
+        if (walletResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ error: "Wallet not found" });
+        }
+
+        const currentBalance = walletResult.rows[0].balance;
+        const newBalance = currentBalance + amount;
+
+        await client.query(
+            "UPDATE wallet SET balance = $1 WHERE id = $2",
+            [newBalance, walletId]
+        );
+
+        await client.query("COMMIT");
+
+        return res.status(200).json({ balance: newBalance });
+    } catch (err) {
+        if (client) await client.query("ROLLBACK");
+        console.error("Error updating balance", err);
+        return res.status(500).json({ error: "Failed to update wallet" });
+    } finally {
+        if (client) client.release();
+    }
+});
+
+app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
+    const walletId = Number(req.params.id);
+    const body = req.body as AmountRequest;
+    const { amount } = body;
+
+    if (typeof amount !== "number" || amount <= 0) {
+        return res.status(400).json({ error: "amount must be a positive number" });
+    }
+
+    let client;
+    try {
+        client = await pool.connect();
+        await client.query("BEGIN");
+
+        const walletResult = await client.query(
+            "SELECT balance FROM wallet WHERE id = $1",
+            [walletId]
+        );
+
+        if (walletResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ error: "Wallet not found" });
+        }
+
+        if (walletResult.rows[0].balance < amount) {
+            return res.status(400).json({ error: "Insufficient balance" });
+        }
+
+        const currentBalance = walletResult.rows[0].balance;
+        const newBalance = currentBalance - amount;
+
+        await client.query(
+            "UPDATE wallet SET balance = $1 WHERE id = $2",
+            [newBalance, walletId]
+        );
+
+        await client.query("COMMIT");
+
+        return res.status(200).json({ balance: newBalance });
+
+    } catch (error) {
+        if (client) await client.query("ROLLBACK");
+        console.error("Error updating balance", error);
+        return res.status(500).json({ error: "Failed to update wallet" });
+    } finally {
+        if (client) client.release();
+    }
+});
 async function startServer() {
     app.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);
