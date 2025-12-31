@@ -79,10 +79,15 @@ app.post("/wallets/:id/credit", async (req: Request, res: Response) => {
             [newBalance, walletId, currentVersion]
         );
 
-        if(updatedResult.rowCount ===0 ){
+        if (updatedResult.rowCount === 0) {
             await client.query("ROLLBACK");
             return res.status(409).json({ error: "Wallet update conflict" });
         }
+
+        const transactionResult = await client.query(
+            "INSERT INTO transactions (wallet_id, amount, type, status) VALUES ($1, $2, $3, $4)",
+            [walletId, amount, "CREDIT", "SUCCESS"]
+        );
 
         await client.query("COMMIT");
 
@@ -133,10 +138,15 @@ app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
             [newBalance, walletId, currentVersion]
         );
 
-        if(updatedResult.rowCount ===0 ){
+        if (updatedResult.rowCount === 0) {
             await client.query("ROLLBACK");
             return res.status(409).json({ error: "Wallet update conflict" });
         }
+
+        const transactionResult = await client.query(
+            "INSERT INTO transactions (wallet_id, amount, type, status) VALUES ($1, $2, $3, $4)",
+            [walletId, amount, "DEBIT", "SUCCESS"]
+        );
 
         await client.query("COMMIT");
 
