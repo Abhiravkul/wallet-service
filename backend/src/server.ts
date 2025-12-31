@@ -50,6 +50,11 @@ app.post("/wallets/:id/credit", async (req: Request, res: Response) => {
     const body = req.body as AmountRequest;
     const { amount } = body;
 
+    if (!Number.isInteger(walletId) || walletId <= 0) {
+        return res.status(400).json({ error: "Invalid wallet id" });
+    }
+
+
     if (typeof amount !== "number" || amount <= 0) {
         return res.status(400).json({ error: "amount must be a positive number" });
     }
@@ -84,7 +89,7 @@ app.post("/wallets/:id/credit", async (req: Request, res: Response) => {
             return res.status(409).json({ error: "Wallet update conflict" });
         }
 
-        const transactionResult = await client.query(
+         await client.query(
             "INSERT INTO transactions (wallet_id, amount, type, status) VALUES ($1, $2, $3, $4)",
             [walletId, amount, "CREDIT", "SUCCESS"]
         );
@@ -105,6 +110,9 @@ app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
     const walletId = Number(req.params.id);
     const body = req.body as AmountRequest;
     const { amount } = body;
+    if (!Number.isInteger(walletId) || walletId <= 0) {
+        return res.status(400).json({ error: "Invalid wallet id" });
+    }
 
     if (typeof amount !== "number" || amount <= 0) {
         return res.status(400).json({ error: "amount must be a positive number" });
@@ -143,7 +151,7 @@ app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
             return res.status(409).json({ error: "Wallet update conflict" });
         }
 
-        const transactionResult = await client.query(
+       await client.query(
             "INSERT INTO transactions (wallet_id, amount, type, status) VALUES ($1, $2, $3, $4)",
             [walletId, amount, "DEBIT", "SUCCESS"]
         );
