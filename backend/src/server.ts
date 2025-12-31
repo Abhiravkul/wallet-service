@@ -3,6 +3,7 @@ dotenv.config();
 
 import express, { Request, Response } from "express";
 import { pool } from "./db";
+import { withRetry } from "./utils/retry";
 
 const app = express();
 app.use(express.json());
@@ -24,7 +25,7 @@ app.post("/wallets", async (req: Request, res: Response) => {
     let client;
 
     try {
-        client = await pool.connect();
+        client = await withRetry(()=>pool.connect());
 
         const result = await client.query(
             "INSERT INTO wallet (user_id) VALUES ($1) RETURNING id",
@@ -62,7 +63,7 @@ app.post("/wallets/:id/credit", async (req: Request, res: Response) => {
     let client;
 
     try {
-        client = await pool.connect();
+        client = await withRetry(()=>pool.connect());
         await client.query("BEGIN");
 
         const walletResult = await client.query(
@@ -120,7 +121,7 @@ app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
 
     let client;
     try {
-        client = await pool.connect();
+        client = await withRetry(()=>pool.connect());
         await client.query("BEGIN");
 
         const walletResult = await client.query(
