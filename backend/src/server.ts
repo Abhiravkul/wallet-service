@@ -4,6 +4,7 @@ dotenv.config();
 import express, { Request, Response } from "express";
 import { pool } from "./db";
 import { withRetry } from "./utils/retry";
+import { connectRedis } from "./redis";
 
 const app = express();
 app.use(express.json());
@@ -170,6 +171,7 @@ app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
     }
 });
 async function startServer() {
+     await connectRedis();
     app.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);
     });
