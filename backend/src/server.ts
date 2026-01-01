@@ -4,7 +4,7 @@ dotenv.config();
 import express, { Request, Response } from "express";
 import { pool } from "./db";
 import { withRetry } from "./utils/retry";
-import { connectRedis } from "./redis";
+import { connectRedis, redisClient } from "./redis";
 
 const app = express();
 app.use(express.json());
@@ -26,7 +26,7 @@ app.post("/wallets", async (req: Request, res: Response) => {
     let client;
 
     try {
-        client = await withRetry(()=>pool.connect());
+        client = await withRetry(() => pool.connect());
 
         const result = await client.query(
             "INSERT INTO wallet (user_id) VALUES ($1) RETURNING id",
@@ -51,6 +51,7 @@ app.post("/wallets/:id/credit", async (req: Request, res: Response) => {
     const walletId = Number(req.params.id);
     const body = req.body as AmountRequest;
     const { amount } = body;
+    const idempotencyKey = req.header("idempotency-key");
 
     if (!Number.isInteger(walletId) || walletId <= 0) {
         return res.status(400).json({ error: "Invalid wallet id" });
@@ -61,10 +62,26 @@ app.post("/wallets/:id/credit", async (req: Request, res: Response) => {
         return res.status(400).json({ error: "amount must be a positive number" });
     }
 
+    if (!idempotencyKey) {
+        return res.status(400).json({ error: "Missing Idempotency-Key header" });
+    }
+
+    let cachedResponse: string | null = null;
+
+    try {
+        cachedResponse = await redisClient.get(idempotencyKey);
+    } catch (err) {
+        console.warn("Redis unavailable, proceeding without cache");
+    }
+
+    if (cachedResponse) {
+        return res.status(200).json(JSON.parse(cachedResponse));
+    }
+
     let client;
 
     try {
-        client = await withRetry(()=>pool.connect());
+        client = await withRetry(() => pool.connect());
         await client.query("BEGIN");
 
         const walletResult = await client.query(
@@ -91,12 +108,20 @@ app.post("/wallets/:id/credit", async (req: Request, res: Response) => {
             return res.status(409).json({ error: "Wallet update conflict" });
         }
 
-         await client.query(
-            "INSERT INTO transactions (wallet_id, amount, type, status) VALUES ($1, $2, $3, $4)",
-            [walletId, amount, "CREDIT", "SUCCESS"]
+        await client.query(
+            "INSERT INTO transactions (wallet_id, amount, type, status, idempotency_key) VALUES ($1, $2, $3, $4, $5)",
+            [walletId, amount, "CREDIT", "SUCCESS", idempotencyKey]
         );
-
         await client.query("COMMIT");
+        try {
+            await redisClient.set(
+                idempotencyKey,
+                JSON.stringify({ balance: newBalance }),
+                { EX: 600 }
+            );
+        } catch (err) {
+            console.warn("Failed to cache idempotency response");
+        }
 
         return res.status(200).json({ balance: newBalance });
     } catch (err) {
@@ -112,6 +137,9 @@ app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
     const walletId = Number(req.params.id);
     const body = req.body as AmountRequest;
     const { amount } = body;
+    const idempotencyKey = req.header("idempotency-key");
+
+
     if (!Number.isInteger(walletId) || walletId <= 0) {
         return res.status(400).json({ error: "Invalid wallet id" });
     }
@@ -119,10 +147,23 @@ app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
     if (typeof amount !== "number" || amount <= 0) {
         return res.status(400).json({ error: "amount must be a positive number" });
     }
+    if(!idempotencyKey){
+        return res.status(400).json({ error: "Missing Idempotency-Key header" });
+    }
+    let cachedResponse: string | null = null;
 
+    try {
+         cachedResponse = await redisClient.get(idempotencyKey);
+    } catch (error) {
+        console.warn("Redis unavailable, proceeding without cache");
+    }
+
+    if(cachedResponse){
+       return res.status(200).json(JSON.parse(cachedResponse));
+    }
     let client;
     try {
-        client = await withRetry(()=>pool.connect());
+        client = await withRetry(() => pool.connect());
         await client.query("BEGIN");
 
         const walletResult = await client.query(
@@ -153,13 +194,17 @@ app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
             return res.status(409).json({ error: "Wallet update conflict" });
         }
 
-       await client.query(
-            "INSERT INTO transactions (wallet_id, amount, type, status) VALUES ($1, $2, $3, $4)",
-            [walletId, amount, "DEBIT", "SUCCESS"]
+        await client.query(
+            "INSERT INTO transactions (wallet_id, amount, type, status, idempotency_key) VALUES ($1, $2, $3, $4, $5)",
+            [walletId, amount, "DEBIT", "SUCCESS", idempotencyKey]
         );
 
         await client.query("COMMIT");
-
+        try {
+            await redisClient.set(idempotencyKey, JSON.stringify({ balance: newBalance }), {EX: 600});
+        } catch (error) {
+            console.warn("Failed to cache idempotency response");
+        }
         return res.status(200).json({ balance: newBalance });
 
     } catch (error) {
@@ -171,7 +216,7 @@ app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
     }
 });
 async function startServer() {
-     await connectRedis();
+    await connectRedis();
     app.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);
     });

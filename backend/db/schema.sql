@@ -6,13 +6,14 @@ CREATE TABLE wallet (
 );
 
 CREATE TABLE transactions (
-  id BIGSERIAL PRIMARY KEY,
-  wallet_id BIGINT NOT NULL,
-  amount BIGINT NOT NULL,
-  type VARCHAR(10) NOT NULL,
-  status VARCHAR(20) NOT NULL,
-  idempotency_key VARCHAR(255),
-  CONSTRAINT fk_wallet
-    FOREIGN KEY (wallet_id)
-    REFERENCES wallet(id)
+    id BIGSERIAL PRIMARY KEY,
+    wallet_id BIGINT NOT NULL,
+    amount BIGINT NOT NULL,
+    type VARCHAR(10) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    idempotency_key VARCHAR(255) NOT NULL,
+    CONSTRAINT uniq_transactions_idempotency_key UNIQUE (idempotency_key),
+    CONSTRAINT fk_wallet
+        FOREIGN KEY (wallet_id)
+        REFERENCES wallet(id)
 );
