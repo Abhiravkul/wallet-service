@@ -9,9 +9,20 @@ import { connectRedis, redisClient } from "./redis";
 const app = express();
 app.use(express.json());
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+const REQUEST_TIMEOUT_MS = 5000;
+
 type CreateWalletRequest = {
     user_id: number;
 };
+
+app.use((req, res, next) => {
+  res.setTimeout(REQUEST_TIMEOUT_MS, () => {
+    if (!res.headersSent) {
+      res.status(503).json({ error: "Request timed out" });
+    }
+  });
+  next();
+});
 
 app.get("/health", (req: Request, res: Response) => {
     res.status(200).send("OK");
