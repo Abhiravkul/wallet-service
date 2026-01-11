@@ -45,7 +45,7 @@ app.post("/wallets", async (req: Request, res: Response) => {
             "INSERT INTO wallet (user_id) VALUES ($1) RETURNING id, balance",
             [user_id]
         );
-
+        console.log("user id insert: ", user_id);
         return res.status(201).json({
             wallet_id: result.rows[0].id,
             balance: result.rows[0].balance,
@@ -108,7 +108,7 @@ app.post("/wallets/:id/credit", async (req: Request, res: Response) => {
             return res.status(404).json({ error: "Wallet not found" });
         }
 
-        const currentBalance = walletResult.rows[0].balance;
+        const currentBalance = Number(walletResult.rows[0].balance);
         const newBalance = currentBalance + amount;
         const currentVersion = walletResult.rows[0].version;
 
@@ -194,7 +194,7 @@ app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
             return res.status(400).json({ error: "Insufficient balance" });
         }
 
-        const currentBalance = walletResult.rows[0].balance;
+        const currentBalance = Number(walletResult.rows[0].balance);
         const newBalance = currentBalance - amount;
         const currentVersion = walletResult.rows[0].version;
 
