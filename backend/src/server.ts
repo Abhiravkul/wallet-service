@@ -45,7 +45,7 @@ app.post("/wallets", async (req: Request, res: Response) => {
             "INSERT INTO wallet (user_id) VALUES ($1) RETURNING id, balance",
             [user_id]
         );
-        console.log("user id insert: ", user_id);
+        
         return res.status(201).json({
             wallet_id: result.rows[0].id,
             balance: result.rows[0].balance,
