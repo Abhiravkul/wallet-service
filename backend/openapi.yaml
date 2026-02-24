@@ -1,0 +1,183 @@
+openapi: 3.0.3
+info:
+  title: Wallet Service
+  description: |
+    Concurrency-safe wallet service supporting credit and debit operations with
+    optimistic locking and idempotency guarantees.
+
+    Design principles:
+      - PostgreSQL is source of truth
+      - Redis used only as idempotency optimization
+      - No double execution
+      - No negative balances
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:3000
+
+tags:
+  - name: Wallet
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Service healthy
+
+  /wallets:
+    post:
+      tags: [Wallet]
+      summary: Create wallet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWalletRequest'
+      responses:
+        "201":
+          description: Wallet created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /wallets/{id}/credit:
+    post:
+      tags: [Wallet]
+      summary: Credit wallet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Wallet ID
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Prevent duplicate execution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AmountRequest'
+      responses:
+        "200":
+          description: Wallet credited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+        "409":
+          description: Idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /wallets/{id}/debit:
+    post:
+      tags: [Wallet]
+      summary: Debit wallet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AmountRequest'
+      responses:
+        "200":
+          description: Wallet debited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+        "400":
+          description: Business validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "409":
+          description: Concurrency or idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+
+    Wallet:
+      type: object
+      properties:
+        id:
+          type: string
+        balance:
+          type: integer
+          description: Stored in minor units (no floats)
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, CLOSED]
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateWalletRequest:
+      type: object
+      required: [currency]
+      properties:
+        currency:
+          type: string
+          example: INR
+
+    AmountRequest:
+      type: object
+      required: [amount]
+      properties:
+        amount:
+          type: integer
+          minimum: 1
+          description: Amount in minor units
+
+    ErrorResponse:
+      type: object
+      properties:
+        errorCode:
+          type: string
+          example: INSUFFICIENT_FUNDS
+        message:
+          type: string
