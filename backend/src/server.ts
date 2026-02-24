@@ -191,6 +191,7 @@ app.post("/wallets/:id/debit", async (req: Request, res: Response) => {
         }
 
         if (walletResult.rows[0].balance < amount) {
+            await client.query("ROLLBACK");
             return res.status(400).json({ error: "Insufficient balance" });
         }
 
