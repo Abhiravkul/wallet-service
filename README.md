@@ -14,6 +14,11 @@ The goal is not feature breadth, but to demonstrate **reasoning** around:
 
 The system intentionally avoids over-engineering and focuses on **core guarantees**.
 
+## Intended User
+
+The service models a backend wallet used by applications that require
+atomic balance updates under retries and concurrent writes
+
 ---
 
 ## Core Guarantees
@@ -141,6 +146,12 @@ Redis is used as a **fast-path cache** for replaying successful responses, but c
 - Others receive a conflict response
 - No balance corruption occurs
 
+## Logging & Debuggability
+
+The service emits structured logs with request correlation IDs and domain
+event logs (credit, debit, conflicts, idempotency replay) to support
+debugging under concurrency scenarios.
+
 ---
 
 ## Timeout Handling
@@ -198,3 +209,10 @@ This project focuses on **failure modes**.
 The goal was to build something small, understandable, and **correct under stress**.
 
 ---
+## Local Execution
+
+The service runs locally via Docker Compose with PostgreSQL and Redis,
+ensuring environment parity and one-command startup.
+
+---
+API contract defined in openapi.yaml
