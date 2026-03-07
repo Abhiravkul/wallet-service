@@ -75,7 +75,7 @@ export class WalletService {
 
             await walletRepo.updateTransaction(client, {
                 walletId,
-                amount: newBalance,
+                amount: txAmount,
                 type,
                 idempotencyKey,
                 balanceBefore: currentBalance,
