@@ -1,0 +1,1 @@
+export enum TxType { CREDIT = "CREDIT", DEBIT = "DEBIT" }
