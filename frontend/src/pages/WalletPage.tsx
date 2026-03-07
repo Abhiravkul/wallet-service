@@ -208,20 +208,24 @@ export default function WalletPage() {
 
             return "success";
         } catch (err: unknown) {
-            if (
-                typeof err === "object" &&
-                err !== null &&
-                "error" in err &&
-                typeof (err as { error: unknown }).error === "string"
-            ) {
-                const message = (err as { error: string }).error;
 
-                if (message === "Wallet update conflict") {
-                    return "conflict";
-                }
-            }
-            throw err;
+    if (
+        typeof err === "object" &&
+        err !== null &&
+        "errorCode" in err &&
+        typeof (err as { errorCode: unknown }).errorCode === "string"
+    ) {
+
+        const code = (err as { errorCode: string }).errorCode;
+
+        if (code === "VERSION_CONFLICT") {
+            return "conflict";
         }
+
+    }
+
+    throw err;
+}
     };
 
     const concurrentRequests = async () => {
