@@ -7,6 +7,7 @@ import { withRetry } from "./utils/retry";
 import { connectRedis, redisClient } from "./utils/redis";
 import router from './routes/wallet.routes';
 import cors from "cors";
+import { errorHandler } from "./middleware/errorHandler";
 
 const app = express();
 app.use(express.json());
@@ -28,6 +29,7 @@ app.get("/health", (req: Request, res: Response) => {
     res.status(200).send("OK");
 });
 
+
 app.use("/", router);
 
 async function startServer() {
@@ -36,5 +38,5 @@ async function startServer() {
         console.log(`Server running on port ${PORT}`);
     });
 }
-
+app.use(errorHandler);
 startServer();
