@@ -2,73 +2,117 @@ import { pool } from "../utils/db";
 import { redisClient } from "../utils/redis";
 import { WalletRepository } from "../repositories/wallet.repo";
 import { withRetry } from "../utils/retry";
+import { TxType } from "../domain/types/TxTypes";
+import { ConflictError } from "../domain/errors/ConflictError";
+import { ErrorCode } from "../domain/errors/ErrorCode";
+import { ValidationError } from "../domain/errors/ValidationError";
 const walletRepo = new WalletRepository();
 
-export enum TxType { CREDIT = "CREDIT", DEBIT = "DEBIT" }
 
 export class WalletService {
-    async createWallet(user_id: number){
-        let client;
-        try{
-            client = await withRetry(()=> pool.connect());
-            const response = await walletRepo.create(client, user_id);
-            return response;
-        }finally{
-            if(client) client.release();
-        }
-    }
-    async executeTx(walletId: number, amount: number, idempotencyKey: string, type: TxType) {
-
-        let cachedResponse: string | null = null;
-        try {
-            cachedResponse = await redisClient.get(idempotencyKey);
-        } catch (err) {
-            console.warn("Redis unavailable, proceeding without cache");
-        }
-        if (cachedResponse) {
-            return JSON.parse(cachedResponse);
-        }
-
+    async createWallet(user_id: number) {
         let client;
         try {
             client = await withRetry(() => pool.connect());
-            await client.query("BEGIN");
-
-            const walletResult = await walletRepo.findById(client, walletId);
-
-            if (!walletResult) throw new Error("WALLET_NOT_FOUND");
-
-            const currentBalance = BigInt(walletResult.balance);
-            const bigAmount = BigInt(amount)
-            const currentVersion = walletResult.version;
-
-            if (type === TxType.DEBIT && currentBalance < bigAmount) {
-                throw new Error("INSUFFICIENT_FUNDS");
-            }
-
-            const newBalance = type === TxType.CREDIT
-                ? currentBalance + bigAmount
-                : currentBalance - bigAmount;
-
-            const updateWallet = await walletRepo.updateWallet(client, newBalance, walletId, currentVersion);
-            if (updateWallet.rowCount === 0){
-                await client.query("ROLLBACK");
-                throw new Error('CONCURRENCY_CONFLICT');
-            } 
-
-            await walletRepo.updateTransaction(client, { walletId, amount: bigAmount, type, idempotencyKey });
-
-            await client.query("COMMIT");
-
-            const response = { balance: newBalance.toString() };
-            await redisClient.set(idempotencyKey, JSON.stringify(response), { EX: 600 });
-
+            const response = await walletRepo.create(client, user_id);
             return response;
-        } catch (error) {
-            if (client) await client.query("ROLLBACK");
-            throw error;
         } finally {
             if (client) client.release();
         }
     }
+
+    async executeTx(
+        walletId: number,
+        amount: number,
+        idempotencyKey: string,
+        type: TxType
+    ) {
+        
+        const cached = await this.getCachedResponse(idempotencyKey);
+        if (cached) return cached;
+
+        const client = await withRetry(() => pool.connect());
+
+        try {
+            await client.query("BEGIN");
+            const wallet = await walletRepo.findById(client, walletId);
+
+            if (!wallet) {
+                throw new ValidationError(
+                    ErrorCode.INVALID_WALLET_ID,
+                    "Wallet not found"
+                );
+            }
+
+            const currentBalance = BigInt(wallet.balance);
+            const txAmount = BigInt(amount);
+
+            if (type === TxType.DEBIT && currentBalance < txAmount) {
+                throw new ValidationError(
+                    ErrorCode.INSUFFICIENT_FUNDS,
+                    "Balance too low"
+                );
+            }
+
+            const newBalance =
+                type === TxType.CREDIT
+                    ? currentBalance + txAmount
+                    : currentBalance - txAmount;
+
+            const updated = await walletRepo.updateWallet(
+                client,
+                newBalance,
+                walletId,
+                wallet.version
+            );
+
+            if (updated.rowCount === 0) {
+                throw new ConflictError(
+                    ErrorCode.VERSION_CONFLICT,
+                    "Wallet update conflict"
+                );
+            }
+
+            await walletRepo.updateTransaction(client, {
+                walletId,
+                amount: newBalance,
+                type,
+                idempotencyKey,
+                balanceBefore: currentBalance,
+                balanceAfter: newBalance
+            });
+
+            await client.query("COMMIT");
+
+            const response = { balance: newBalance.toString() };
+
+            await this.cacheResponse(idempotencyKey, response);
+
+            return response;
+
+        } catch (err) {
+            await client.query("ROLLBACK");
+            throw err;
+        } finally {
+            client.release();
+        }
+    }
+    private async getCachedResponse(key: string) {
+        try {
+            const cached = await redisClient.get(key);
+            return cached ? JSON.parse(cached) : null;
+        } catch (err) {
+            console.warn("Redis unavailable, proceeding without cache");
+            return null;
+        }
+    }
+    private async cacheResponse(key: string, response: any) {
+        try {
+            await redisClient.set(key, JSON.stringify(response), { EX: 600 });
+        } catch (err) {
+            console.warn("Redis unavailable, skipping cache");
+        }
+    }
 }
+
+

@@ -4,14 +4,17 @@ type TransactionData = {
     walletId: number,
     amount: bigint,
     type: 'CREDIT' | 'DEBIT',
-    idempotencyKey: string
+    idempotencyKey: string,
+    balanceBefore: BigInt,
+    balanceAfter: BigInt
 }
 
 export class WalletRepository {
     async create(client: PoolClient, user_id: number) {
+        const currency = "Rupee";
         const result = await client.query(
-            "INSERT INTO wallet (user_id) VALUES ($1) RETURNING id, balance",
-            [user_id]
+            "INSERT INTO wallet (user_id, currency) VALUES ($1, $2) RETURNING id, balance",
+            [user_id, currency]
         );
         return {
             wallet_id: result.rows[0].id,
@@ -36,8 +39,8 @@ export class WalletRepository {
 
     async updateTransaction(client: PoolClient, data: TransactionData) {
         await client.query(
-            "INSERT INTO transactions (wallet_id, amount, type, status, idempotency_key) VALUES ($1, $2, $3, $4, $5)",
-            [data.walletId, data.amount, data.type, "SUCCESS", data.idempotencyKey]
+            "INSERT INTO transactions (wallet_id, amount, type, status, idempotency_key, balance_before, balance_after) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            [data.walletId, data.amount, data.type, "SUCCESS", data.idempotencyKey, data.balanceBefore, data.balanceAfter]
         );
     }
 }
