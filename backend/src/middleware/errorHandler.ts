@@ -1,20 +1,36 @@
 import { AppError } from "../domain/errors/AppError";
 import { Request, Response, NextFunction, ErrorRequestHandler } from 'express';
+import { logger } from "../utils/logger";
 
-export function errorHandler(err: any, req: Request, res: Response, next: NextFunction) {
+export function errorHandler(err: unknown, req: Request, res: Response, next: NextFunction) {
 
-  if (err instanceof AppError) {
+  const isAppError = err instanceof AppError;
+
+  const errorCode = isAppError ? err.code : "INTERNAL_ERROR";
+  const errorMessage = isAppError ? err.message : "Unexpected server error";
+
+  if (isAppError) {
+    logger.warn({
+      event: errorCode,
+      requestId: req.requestId,
+      error: errorMessage,
+      stack: err.stack
+    });
     return res.status(err.statusCode).json({
-      errorCode: err.code,
-      message: err.message
+      requestId: req.requestId,
+      errorCode: errorCode,
+      message: errorMessage
     });
   }
 
- console.error(err);
-
+  logger.warn({
+    event: errorCode,
+    requestId: req.requestId,
+    error: errorMessage
+  });
 
   return res.status(500).json({
-    errorCode: "INTERNAL_ERROR",
-    message: "Unexpected server error"
+    errorCode: errorCode,
+    message: errorMessage
   });
 }

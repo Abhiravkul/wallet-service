@@ -8,6 +8,8 @@ import { connectRedis, redisClient } from "./utils/redis";
 import router from './routes/wallet.routes';
 import cors from "cors";
 import { errorHandler } from "./middleware/errorHandler";
+import { requestIdMiddleware } from "./middleware/requestId";
+import { logger } from "./utils/logger";
 
 const app = express();
 app.use(express.json());
@@ -15,6 +17,7 @@ app.use( cors({ origin: "http://localhost:5173", }) );
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 const REQUEST_TIMEOUT_MS = 5000;
 
+app.use(requestIdMiddleware);
 
 app.use((req, res, next) => {
     res.setTimeout(REQUEST_TIMEOUT_MS, () => {
@@ -35,7 +38,8 @@ app.use("/", router);
 async function startServer() {
     await connectRedis();
     app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
+        logger.info(`Server running on port ${PORT}`);
+
     });
 }
 app.use(errorHandler);
