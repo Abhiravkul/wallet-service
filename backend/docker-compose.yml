@@ -19,6 +19,21 @@ services:
     container_name: wallet-redis
     ports:
       - "6379:6379"
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: wallet-loki
+    ports:
+      - "3100:3100"
+    environment:
+      - LOKI_HOST=http://loki:3100
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: wallet-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
 
 volumes:
   postgres_data:
