@@ -3,28 +3,26 @@ import { WalletService } from '../services/wallet.services';
 import { ValidationError } from '../domain/errors/ValidationError';
 import { TxType } from "../domain/types/TxTypes"
 import { ErrorCode } from '../domain/errors/ErrorCode';
-type CreateWalletRequest = {
-    user_id: number,
-}
-
-type AmountRequest = {
-    amount: bigint;
-};
-
+import { logger } from '../utils/logger';
 
 export class WalletController {
-    private service = new WalletService();
+
+   constructor(private service: WalletService){}
+
     create = async (req: Request, res: Response) => {
-      
-            const body = req.body as CreateWalletRequest;
-            const { user_id } = body;
+            const { user_id } = req.body;
             if (typeof user_id !== "number") {
                 throw new ValidationError(
                     ErrorCode.INVALID_USERID,
                     "user_id must be a number"
                 );
             }
+                    
+            logger.info({ requestId: req.requestId, userId: user_id }, "Create wallet request");
+
             const wallet = await this.service.createWallet(user_id);
+
+            logger.info({ requestId: req.requestId, walletId: wallet.wallet_id }, "Wallet created");
 
             res.status(201).json(wallet);
             return;
@@ -32,8 +30,7 @@ export class WalletController {
 
     handleTransaction = (type: TxType) => async (req: Request, res: Response) => {
             const walletId = Number(req.params.id);
-            const body = req.body as AmountRequest;
-            const { amount } = body;
+            const { amount, currency } = req.body;
             const idempotencyKey = req.header("idempotency-key");
 
             if (!Number.isInteger(walletId) || walletId <= 0) {
@@ -56,7 +53,7 @@ export class WalletController {
                     "Missing Idempotency-Key header"
                 );
             }
-            const result = await this.service.executeTx(walletId, amount, idempotencyKey, type);
+            const result = await this.service.executeTx(walletId, amount, idempotencyKey, type, currency);
 
              res.status(200).json(result);
              return;

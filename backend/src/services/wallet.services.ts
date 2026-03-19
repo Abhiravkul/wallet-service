@@ -5,16 +5,22 @@ import { withRetry } from "../utils/retry";
 import { TxType } from "../domain/types/TxTypes";
 import { ConflictError } from "../domain/errors/ConflictError";
 import { ErrorCode } from "../domain/errors/ErrorCode";
-import { ValidationError } from "../domain/errors/ValidationError";
-const walletRepo = new WalletRepository();
+import { validateBalance, validateCurrency, validateDebitLimits, validateWalletExists, validateWalletStatus } from "../domain/rules/walletRules";
+import { logger } from "../utils/logger";
 
+type RedisClient = typeof redisClient;
 
 export class WalletService {
+
+    constructor(private walletRepo: WalletRepository,
+        private redisClient: RedisClient) { }
+
     async createWallet(user_id: number) {
         let client;
         try {
             client = await withRetry(() => pool.connect());
-            const response = await walletRepo.create(client, user_id);
+
+            const response = await this.walletRepo.create(client, user_id);
             return response;
         } finally {
             if (client) client.release();
@@ -25,9 +31,10 @@ export class WalletService {
         walletId: number,
         amount: number,
         idempotencyKey: string,
-        type: TxType
+        type: TxType,
+        currency: string
     ) {
-        
+
         const cached = await this.getCachedResponse(idempotencyKey);
         if (cached) return cached;
 
@@ -35,31 +42,47 @@ export class WalletService {
 
         try {
             await client.query("BEGIN");
-            const wallet = await walletRepo.findById(client, walletId);
 
-            if (!wallet) {
-                throw new ValidationError(
-                    ErrorCode.INVALID_WALLET_ID,
-                    "Wallet not found"
-                );
-            }
+            logger.info({
+                requestId: idempotencyKey,
+                walletId,
+                amount,
+                type
+            }, "Transaction started");
+
+            const wallet = await this.walletRepo.findById(client, walletId);
+
+            validateWalletExists(wallet);
+
+            validateWalletStatus(wallet.status, type);
+
+            validateCurrency(wallet.currency, currency);
 
             const currentBalance = BigInt(wallet.balance);
             const txAmount = BigInt(amount);
+            let currentTotal = txAmount;
 
-            if (type === TxType.DEBIT && currentBalance < txAmount) {
-                throw new ValidationError(
-                    ErrorCode.INSUFFICIENT_FUNDS,
-                    "Balance too low"
-                );
+            if (type === TxType.DEBIT) {
+                const currentDebitTotal = BigInt(await this.walletRepo.getDailyTransactionTotal(client, walletId, type));
+                currentTotal += currentDebitTotal;
             }
+
+            if (type === TxType.CREDIT) {
+                const currentCreditTotal = BigInt(await this.walletRepo.getDailyTransactionTotal(client, walletId, type));
+                currentTotal += currentCreditTotal;
+            }
+
+
+            validateDebitLimits(type, txAmount, currentTotal);
+
+            validateBalance(type, txAmount, currentBalance);
 
             const newBalance =
                 type === TxType.CREDIT
                     ? currentBalance + txAmount
                     : currentBalance - txAmount;
 
-            const updated = await walletRepo.updateWallet(
+            const updated = await this.walletRepo.updateWallet(
                 client,
                 newBalance,
                 walletId,
@@ -73,7 +96,7 @@ export class WalletService {
                 );
             }
 
-            await walletRepo.updateTransaction(client, {
+            await this.walletRepo.updateTransaction(client, {
                 walletId,
                 amount: txAmount,
                 type,
@@ -83,6 +106,14 @@ export class WalletService {
             });
 
             await client.query("COMMIT");
+
+            logger.info({
+                event: "TRANSACTION_SUCCESS",
+                walletId,
+                amount,
+                type,
+                balanceAfter: newBalance.toString()
+            });
 
             const response = { balance: newBalance.toString() };
 
@@ -99,18 +130,18 @@ export class WalletService {
     }
     private async getCachedResponse(key: string) {
         try {
-            const cached = await redisClient.get(key);
+            const cached = await this.redisClient.get(key);
             return cached ? JSON.parse(cached) : null;
         } catch (err) {
-            console.warn("Redis unavailable, proceeding without cache");
+           logger.warn({ key }, "Redis unavailable, proceeding without cache");
             return null;
         }
     }
     private async cacheResponse(key: string, response: any) {
         try {
-            await redisClient.set(key, JSON.stringify(response), { EX: 600 });
+            await this.redisClient.set(key, JSON.stringify(response), { EX: 600 });
         } catch (err) {
-            console.warn("Redis unavailable, skipping cache");
+              logger.warn({ key }, "Redis unavailable, proceeding without cache");
         }
     }
 }
