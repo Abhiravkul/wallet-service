@@ -52,6 +52,30 @@ The system provides the following guarantees:
 
 ---
 
+## Getting Started
+
+### Prerequisites
+- Docker  
+- Docker Compose  
+
+---
+
+### Start the Application
+
+Build all services and start the system:
+
+```bash
+docker-compose up --build
+```
+---
+
+## API Endpoints
+
+- POST /wallet
+- POST /wallet/:id/credit
+- POST /wallet/:id/debit
+
+---
 ## Wallet Data Model
 
 ### Wallet Table
@@ -148,7 +172,8 @@ Redis is used as a **fast-path cache** for replaying successful responses, but c
 
 ## Logging & Debuggability
 
-The service emits structured logs with request correlation IDs and domain
+The service emits structured logs to Loki using pino-loki and visualized in Grafana 
+with request correlation IDs and domain
 event logs (credit, debit, conflicts, idempotency replay) to support
 debugging under concurrency scenarios.
 
