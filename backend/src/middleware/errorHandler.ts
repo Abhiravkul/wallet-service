@@ -3,7 +3,7 @@ import { Request, Response, NextFunction, ErrorRequestHandler } from 'express';
 import { logger } from "../utils/logger";
 
 export function errorHandler(err: unknown, req: Request, res: Response, next: NextFunction) {
-
+  const errorInstance = err instanceof Error ? err : new Error(String(err));
   const isAppError = err instanceof AppError;
 
   const errorCode = isAppError ? err.code : "INTERNAL_ERROR";
@@ -26,7 +26,8 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
   logger.warn({
     event: errorCode,
     requestId: req.requestId,
-    error: errorMessage
+    error: errorMessage,
+    stack: errorInstance.stack
   });
 
   return res.status(500).json({

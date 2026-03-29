@@ -36,11 +36,16 @@ app.get("/health", (req: Request, res: Response) => {
 app.use("/", router);
 
 async function startServer() {
-    await connectRedis();
-    app.listen(PORT, () => {
-        logger.info(`Server running on port ${PORT}`);
-
-    });
+    try {
+        logger.info("Connecting to Redis...");
+        await connectRedis();
+        logger.info("Redis connected. Starting Express...");
+        app.listen(PORT, "0.0.0.0", () => {
+            logger.info(`Server running on port ${PORT}`);
+        });
+    } catch (err:any) {
+        logger.error("Failed to start server:", err);
+    }
 }
-app.use(errorHandler);
 startServer();
+app.use(errorHandler);

@@ -8,7 +8,8 @@ type Wallet = {
 type RetryRequest = {
     action: "credit" | "debit",
     idempotency_key: string,
-    amount: number
+    amount: number,
+    currency: string
 }
 
 export default function WalletPage() {
@@ -37,7 +38,7 @@ export default function WalletPage() {
         try {
             const res = await apiClient.post(
                 `/wallets/${wallet.wallet_id}/credit`,
-                { amount },
+                { amount, currency: "Rupee" },
                 {
                     headers: {
                         "Idempotency-Key": idempotencyKey,
@@ -55,7 +56,8 @@ export default function WalletPage() {
             setLastRequest({
                 action: "credit",
                 idempotency_key: idempotencyKey,
-                amount: amount
+                amount: amount,
+                currency: "Rupee"
             });
         } catch (err: unknown) {
             if (typeof err === "object" && err !== null && "error" in err) {
@@ -88,7 +90,10 @@ export default function WalletPage() {
         try {
             const res = await apiClient.post(
                 `/wallets/${wallet.wallet_id}/debit`,
-                { amount },
+                {
+                    amount,
+                    currency: "Rupee"
+                },
                 {
                     headers: {
                         "Idempotency-Key": idempotencyKey,
@@ -108,7 +113,8 @@ export default function WalletPage() {
             setLastRequest({
                 action: "debit",
                 idempotency_key: idempotencyKey,
-                amount: amount
+                amount: amount,
+                currency: "Rupee"
             });
         } catch (err: unknown) {
             if (typeof err === "object" && err !== null && "error" in err) {
@@ -198,7 +204,7 @@ export default function WalletPage() {
         try {
             await apiClient.post(
                 `/wallets/${wallet.wallet_id}/credit`,
-                { amount },
+                { amount, currency: "Rupee" },
                 {
                     headers: {
                         "Idempotency-Key": idempotencyKey,
@@ -209,23 +215,23 @@ export default function WalletPage() {
             return "success";
         } catch (err: unknown) {
 
-    if (
-        typeof err === "object" &&
-        err !== null &&
-        "errorCode" in err &&
-        typeof (err as { errorCode: unknown }).errorCode === "string"
-    ) {
+            if (
+                typeof err === "object" &&
+                err !== null &&
+                "errorCode" in err &&
+                typeof (err as { errorCode: unknown }).errorCode === "string"
+            ) {
 
-        const code = (err as { errorCode: string }).errorCode;
+                const code = (err as { errorCode: string }).errorCode;
 
-        if (code === "VERSION_CONFLICT") {
-            return "conflict";
+                if (code === "VERSION_CONFLICT") {
+                    return "conflict";
+                }
+
+            }
+
+            throw err;
         }
-
-    }
-
-    throw err;
-}
     };
 
     const concurrentRequests = async () => {
