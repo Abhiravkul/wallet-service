@@ -7,6 +7,7 @@ import { ConflictError } from "../domain/errors/ConflictError";
 import { ErrorCode } from "../domain/errors/ErrorCode";
 import { validateBalance, validateCurrency, validateDebitLimits, validateWalletExists, validateWalletStatus } from "../domain/rules/walletRules";
 import { logger } from "../utils/logger";
+import { PoolClient } from "pg";
 
 type RedisClient = typeof redisClient;
 
@@ -32,16 +33,17 @@ export class WalletService {
         amount: number,
         idempotencyKey: string,
         type: TxType,
-        currency: string
+        currency: string,
+        providedClient?: PoolClient 
     ) {
 
         const cached = await this.getCachedResponse(idempotencyKey);
         if (cached) return cached;
 
-        const client = await withRetry(() => pool.connect());
-
+        const client = providedClient || await withRetry(() => pool.connect());
+        const isShared = Boolean(providedClient);
         try {
-            await client.query("BEGIN");
+            if(!isShared) await client.query("BEGIN");
 
             logger.info({
                 requestId: idempotencyKey,
@@ -105,7 +107,7 @@ export class WalletService {
                 balanceAfter: newBalance
             });
 
-            await client.query("COMMIT");
+            if(!isShared) await client.query("COMMIT");
 
             logger.info({
                 event: "TRANSACTION_SUCCESS",
@@ -122,10 +124,10 @@ export class WalletService {
             return response;
 
         } catch (err) {
-            await client.query("ROLLBACK");
+            if(!isShared) await client.query("ROLLBACK");
             throw err;
         } finally {
-            client.release();
+            if(!isShared) client.release();
         }
     }
     private async getCachedResponse(key: string) {

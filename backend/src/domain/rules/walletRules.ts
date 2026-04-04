@@ -38,7 +38,7 @@ export function validateBalance(type: TxType, txAmount: bigint, currentBalance: 
     }
 }
 
-export function validateWalletExists(wallet: Wallet) {
+export function validateWalletExists(wallet: Wallet | null) {
     if (!wallet) {
         throw new ValidationError(ErrorCode.INVALID_WALLET_ID, "Wallet not found");
     }
