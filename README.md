@@ -199,7 +199,7 @@ Correctness is ensured via:
 
 ## Frontend Responsibilities
 
-The frontend is intentionally minimal but non-toy.
+The frontend is intentionally minimal.
 
 It:
 
